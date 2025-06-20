@@ -1,18 +1,18 @@
-# Use a compatible Windows Server 2022 base image
-FROM mcr.microsoft.com/windows/servercore:20348
+# Use Windows Server 2022 base image
+FROM mcr.microsoft.com/windows/servercore:ltsc2022
 
 # Set PowerShell as default shell
 SHELL ["powershell", "-Command"]
 
 # Install Chocolatey with TLS 1.2 enabled
-RUN powershell -Command "Set-ExecutionPolicy Bypass -Scope Process -Force; `
+RUN Set-ExecutionPolicy Bypass -Scope Process -Force; `
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; `
-    iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
+    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 
 # Add Chocolatey to PATH
 ENV PATH="C:\\ProgramData\\chocolatey\\bin;${PATH}"
 
-# Install CLI & Development Tools
+# Install Windows-native CLI & Development Tools
 RUN choco install -y `
     git `
     nodejs-lts `
@@ -21,44 +21,29 @@ RUN choco install -y `
     golang `
     rust `
     dotnet-sdk `
-    vscode.install `
+    vscode `
     7zip `
     winrar `
     curl `
     wget `
     unzip `
-    make `
-    mingw `
     cmake `
     visualstudio2022buildtools `
-    --ignore-checksums
+    --no-progress
 
-# Install Debugging Tools
+# Install Windows-native Debugging Tools
 RUN choco install -y `
     sysinternals `
     windbg `
     processhacker `
-    dbgview `
-    --ignore-checksums
+    --no-progress
 
-# Install MSYS2
-RUN Invoke-WebRequest https://github.com/msys2/msys2-installer/releases/latest/download/msys2-x86_64-20240107.exe -OutFile msys2.exe ; `
-    Start-Process msys2.exe -ArgumentList '--root C:\\msys64 --script C:\\' -NoNewWindow -Wait ; `
-    Remove-Item msys2.exe
-
-ENV PATH="C:\\msys64\\usr\\bin;C:\\msys64\\mingw64\\bin;${PATH}"
-ENV MSYSTEM=MINGW64
-
-# Install Cygwin
-RUN Invoke-WebRequest https://cygwin.com/setup-x86_64.exe -OutFile cygwin.exe ; `
-    Start-Process cygwin.exe -ArgumentList '--quiet-mode --root C:\\cygwin64 --site http://mirrors.kernel.org/sourceware/cygwin/ --packages unzip,tar,gzip,xz,zstd,make,git,gcc-core,bash' -NoNewWindow -Wait ; `
-    Remove-Item cygwin.exe
-
-ENV PATH="C:\\cygwin64\\bin;${PATH}"
+# Install Windows SDK (optional, for native Windows development)
+RUN choco install -y windows-sdk-10.0 --no-progress
 
 # Create a working development directory
-RUN mkdir C:\\dev
-WORKDIR C:\\dev
+RUN New-Item -ItemType Directory -Path C:\dev -Force
+WORKDIR C:\dev
 
-# Default shell: MSYS2 Bash
-CMD ["C:\\msys64\\usr\\bin\\bash.exe", "--login", "-i"]
+# Default to PowerShell for Windows-native experience
+CMD ["powershell", "-NoExit", "-Command", "$PSVersionTable"]
