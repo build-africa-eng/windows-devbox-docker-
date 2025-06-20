@@ -1,12 +1,11 @@
 # Extend the base Windows-native image
-FROM africanfuture/windows-devbox-base:latest
+FROM ${DOCKERHUB_USERNAME}/windows-devbox-base:latest
 
 # Install debugging tools
-RUN choco install -y --no-progress --timeout 2700 \
-    sysinternals \
-    windbg \
+RUN choco install -y --no-progress --timeout 4000 \
+    sysinternals --ignore-checksums \
     processhacker; \
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    if ($LASTEXITCODE -ne 0) { Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log; exit $LASTEXITCODE }
 
 # Default to PowerShell
 CMD ["powershell", "-NoExit", "-Command", "$PSVersionTable"]
