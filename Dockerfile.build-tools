@@ -21,20 +21,33 @@ RUN Write-Host "Downloading Visual Studio Build Tools..."; \
 
 # Install Visual Studio Build Tools
 RUN Write-Host "Installing Visual Studio Build Tools..."; \
-    try { \
-        Start-Process -FilePath "C:\vs_BuildTools.exe" \
-            -ArgumentList "--quiet", "--wait", "--norestart", "--nocache", "--installPath", "C:\BuildTools", \
-                          "--add", "Microsoft.VisualStudio.Workload.VCTools", \
-                          "--add", "Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools", \
-                          "--add", "Microsoft.VisualStudio.Workload.NetCoreBuildTools", "--includeRecommended" \
-            -NoNewWindow -Wait -RedirectStandardOutput "C:\vs_install.log" -RedirectStandardError "C:\vs_error.log"; \
-        if ($LASTEXITCODE -ne 0) { Get-Content C:\vs_install.log; Get-Content C:\vs_error.log; throw "Visual Studio Build Tools installation failed with exit code $LASTEXITCODE" }; \
-    } catch { \
-        Write-Error $_.Exception.Message; \
-        exit 1 \
-    } finally { \
-        Remove-Item "C:\vs_BuildTools.exe", "C:\vs_install.log", "C:\vs_error.log" -Force -ErrorAction SilentlyContinue \
-    }
+    $process = Start-Process -FilePath "C:\vs_BuildTools.exe" -ArgumentList @( \
+        '--quiet', \
+        '--wait', \
+        '--norestart', \
+        '--nocache', \
+        '--installPath', 'C:\BuildTools', \
+        '--add', 'Microsoft.VisualStudio.Workload.VCTools', \
+        '--add', 'Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools', \
+        '--add', 'Microsoft.VisualStudio.Workload.NetCoreBuildTools', \
+        '--includeRecommended' \
+    ) -Wait -PassThru; \
+    if ($process.ExitCode -ne 0) { \
+        Write-Host "##[error]Visual Studio Build Tools installation failed with exit code $($process.ExitCode)."; \
+        $logPath = "$env:TEMP\dd_setup*.log"; \
+        $logs = Get-Item -Path $logPath -ErrorAction SilentlyContinue; \
+        if ($logs) { \
+            Write-Host "Installer logs found at $($logs.FullName):"; \
+            Get-Content -Path $logs.FullName | Write-Host; \
+        } else { \
+            Write-Host "##[warning]Could not find Visual Studio installer logs at '$logPath'."; \
+        } \
+        exit $process.ExitCode; \
+    }; \
+    Remove-Item "C:\vs_BuildTools.exe" -Force -ErrorAction SilentlyContinue; \
+    # Clean up installer cache to reduce image size
+    Remove-Item "C:\Program Files (x86)\Microsoft Visual Studio\Installer" -Recurse -Force -ErrorAction SilentlyContinue; \
+    Remove-Item "C:\ProgramData\Microsoft\VisualStudio" -Recurse -Force -ErrorAction SilentlyContinue
 
 # Install Windows SDK 10.1
 RUN Write-Host "Installing Windows SDK 10.1..."; \
@@ -47,7 +60,7 @@ RUN Write-Host "Installing Windows SDK 10.1..."; \
     }
 
 # Add WinDbg to PATH (installed with Windows SDK)
-ENV PATH="C:\Program Files (x86)\Windows Kits\10\Debuggers\x64;C:\Program Files (x86)\Windows Kits\10\Debuggers\x86;${PATH}"
+ENV PATH="C:\Program Files (x86)\Windows Kits\10\Debuggers\x64;C:\Program Files (x86)\Windows Kits\10\Debuggers\x86;${env:PATH}"
 
 # Verify working directory
 WORKDIR C:/dev
