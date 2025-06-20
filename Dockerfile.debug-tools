@@ -1,0 +1,12 @@
+# Extend the base Windows-native image
+FROM africanfuture/windows-devbox-base:latest
+
+# Install debugging tools
+RUN choco install -y --no-progress --timeout 2700 \
+    sysinternals \
+    windbg \
+    processhacker; \
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+# Default to PowerShell
+CMD ["powershell", "-NoExit", "-Command", "$PSVersionTable"]
