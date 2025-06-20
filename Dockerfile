@@ -1,4 +1,4 @@
-# Use Windows Server 2022 base image
+# Base Windows-native development image
 FROM mcr.microsoft.com/windows/servercore:ltsc2022
 
 # Set PowerShell as default shell
@@ -8,45 +8,20 @@ SHELL ["powershell", "-Command"]
 RUN Set-ExecutionPolicy Bypass -Scope Process -Force; \
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; \
     Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')); \
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-# Add Chocolatey to PATH
-ENV PATH="C:\\ProgramData\\chocolatey\\bin;${PATH}"
-
-# Configure Chocolatey to run non-interactively
-RUN choco config set --name commandExecutionTimeoutSeconds --value 2700; \
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; \
+    $env:PATH = "C:\ProgramData\chocolatey\bin;$env:PATH"; \
+    [System.Environment]::SetEnvironmentVariable('PATH', $env:PATH, [System.EnvironmentVariableTarget]::Machine); \
+    choco config set --name commandExecutionTimeoutSeconds --value 2700; \
     choco feature enable --name allowGlobalConfirmation; \
-    choco feature disable --name showNonElevatedWarnings
+    choco feature disable --name showNonElevatedWarnings; \
+    if (-not (Get-Command choco -ErrorAction SilentlyContinue)) { Write-Error 'Chocolatey not found in PATH'; exit 1 }
 
-# Install Windows-native CLI & Development Tools non-interactively
+# Install core Windows-native tools
 RUN choco install -y --no-progress --timeout 2700 \
     git \
-    nodejs-lts \
-    python \
-    openjdk \
-    golang \
-    rust \
-    dotnet-sdk \
-    vscode \
     7zip \
-    winrar \
     curl \
-    wget \
-    unzip \
-    cmake \
-    visualstudio2022buildtools; \
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-# Install Windows-native Debugging Tools non-interactively
-RUN choco install -y --no-progress --timeout 2700 \
-    sysinternals \
-    windbg \
-    processhacker; \
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-# Install Windows SDK non-interactively
-RUN choco install -y --no-progress --timeout 2700 \
-    windows-sdk-10.0; \
+    wget; \
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # Create a working development directory
