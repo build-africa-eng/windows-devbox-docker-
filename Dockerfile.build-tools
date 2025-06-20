@@ -1,56 +1,84 @@
-# Extend the base Windows-native image
-FROM africanfuture/windows-devbox-base:latest
+# syntax=docker/dockerfile:1.0-windows
+FROM mcr.microsoft.com/windows/servercore:ltsc2022
 
-# Set PowerShell as default shell
-SHELL ["powershell", "-Command"]
+# Use PowerShell as shell
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
 
-# Check disk space before installation
-RUN Write-Host "Checking disk space..."; \
-    $freeSpace = (Get-PSDrive C).Free / 1GB; \
-    Write-Host "Free space on C: $freeSpace GB"; \
-    if ($freeSpace -lt 25) { Write-Error "Insufficient disk space on C: drive (<25GB)"; exit 1 }
-
-# Download Visual Studio Build Tools
-RUN Write-Host "Downloading Visual Studio Build Tools..."; \
-    try { \
-        Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vs_BuildTools.exe" -OutFile "C:\vs_BuildTools.exe" -UseBasicParsing -ErrorAction Stop; \
+# Download MSYS2 installer
+RUN try { \
+        Invoke-WebRequest -Uri 'https://github.com/msys2/msys2-installer/releases/download/2024-07-27/msys2-x86_64-20240727.exe' -OutFile 'msys2-installer.exe' \
     } catch { \
-        Write-Error $_.Exception.Message; \
-        exit 1 \
+        throw "Failed to download MSYS2 installer: $_" \
     }
 
-# Install Visual Studio Build Tools
-RUN Write-Host "Installing Visual Studio Build Tools..."; \
-    try { \
-        Start-Process -FilePath "C:\vs_BuildTools.exe" \
-            -ArgumentList "--quiet", "--wait", "--norestart", "--nocache", "--installPath", "C:\BuildTools", \
-                          "--add", "Microsoft.VisualStudio.Workload.VCTools", \
-                          "--add", "Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools", \
-                          "--add", "Microsoft.VisualStudio.Workload.NetCoreBuildTools", "--includeRecommended" \
-            -NoNewWindow -Wait -RedirectStandardOutput "C:\vs_install.log" -RedirectStandardError "C:\vs_error.log"; \
-        if ($LASTEXITCODE -ne 0) { Get-Content C:\vs_install.log; Get-Content C:\vs_error.log; throw "Visual Studio Build Tools installation failed with exit code $LASTEXITCODE" }; \
-    } catch { \
-        Write-Error $_.Exception.Message; \
-        exit 1 \
-    } finally { \
-        Remove-Item "C:\vs_BuildTools.exe", "C:\vs_install.log", "C:\vs_error.log" -Force -ErrorAction SilentlyContinue \
+# Install MSYS2 with debugging
+RUN Write-Host "Starting MSYS2 installation at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"; \
+    Write-Host 'Note: Set-MpPreference unavailable in Server Core; Defender may interfere...'; \
+    Write-Host 'Monitoring installation progress...'; \
+    $process = Start-Process -FilePath '.\\msys2-installer.exe' -ArgumentList '/S' -PassThru -RedirectStandardOutput 'install.log' -RedirectStandardError 'install.err'; \
+    while (-not $process.HasExited) { \
+        Start-Sleep -Seconds 10; \
+        if (Test-Path 'C:\\msys64') { Write-Host "MSYS2 directory detected at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"; dir 'C:\\msys64' -ErrorAction SilentlyContinue | Write-Host } \
+    }; \
+    Write-Host "Installer completed at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') with exit code: $($process.ExitCode)"; \
+    Write-Host 'Installer output:'; \
+    Get-Content 'install.log' -ErrorAction SilentlyContinue | Write-Host; \
+    Write-Host 'Installer errors (if any):'; \
+    Get-Content 'install.err' -ErrorAction SilentlyContinue | Write-Host; \
+    Write-Host "Checking MSYS2 directory at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"; \
+    $msysPath = 'C:\\msys64'; \
+    if (-not (Test-Path $msysPath)) { \
+        Write-Host 'C:\msys64 not found, checking C:\msys2'; \
+        $msysPath = 'C:\\msys2'; \
+        if (-not (Test-Path $msysPath)) { Write-Host 'C:\msys2 not found'; dir 'C:\\' -ErrorAction SilentlyContinue | Write-Host } \
+    }; \
+    if (Test-Path $msysPath) { dir $msysPath -ErrorAction SilentlyContinue | Write-Host }; \
+    Write-Host 'Checking for msys2_shell.cmd and bash.exe after installation:'; \
+    if (Test-Path "$msysPath\\msys2_shell.cmd") { Write-Host 'msys2_shell.cmd found' } else { Write-Host 'msys2_shell.cmd not found' }; \
+    if (Test-Path "$msysPath\\usr\\bin\\bash.exe") { Write-Host 'bash.exe found' } else { Write-Host 'bash.exe not found' }; \
+    if (-not (Test-Path "$msysPath\\usr\\bin\\bash.exe")) { \
+        Write-Host 'Running MSYS2 initialization...'; \
+        if (Test-Path "$msysPath\\msys2_shell.cmd") { \
+            Write-Host "Running msys2_shell.cmd at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"; \
+            & "$msysPath\\msys2_shell.cmd" -defterm -no-start -c 'exit'; \
+            Write-Host "Checking for bash.exe after initialization at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"; \
+            if (Test-Path "$msysPath\\usr\\bin\\bash.exe") { Write-Host 'bash.exe found after initialization' } \
+            else { throw 'MSYS2 initialization failed: bash.exe not found in $msysPath\\usr\\bin' } \
+        } else { \
+            throw 'MSYS2 installation failed: msys2_shell.cmd not found in $msysPath' \
+        } \
+    }; \
+    Write-Host "Verifying bash.exe persistence after delay at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"; \
+    Start-Sleep -Seconds 10; \
+    if (-not (Test-Path "$msysPath\\usr\\bin\\bash.exe")) { throw 'bash.exe was removed after installation!' }; \
+    Write-Host "Checking Defender events..."; \
+    Get-EventLog -LogName 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue | Where-Object { $_.EventID -eq 1006 -or $_.EventID -eq 1008 } | Select-Object TimeGenerated, Message | Write-Host
+
+# Clean up installer
+RUN Remove-Item 'msys2-installer.exe'; \
+    Remove-Item 'install.log' -ErrorAction SilentlyContinue; \
+    Remove-Item 'install.err' -ErrorAction SilentlyContinue
+
+# Update PATH
+ENV PATH="C:\\msys64\\usr\\bin;C:\\msys64\\mingw64\\bin;%PATH%"
+
+# Update MSYS2 packages and clean cache
+RUN & 'C:\\msys64\\usr\\bin\\bash.exe' -c 'pacman -Syu --noconfirm'; \
+    Remove-Item -Recurse -Force 'C:\\msys64\\var\\cache\\pacman\\pkg' -ErrorAction SilentlyContinue
+
+# Bash sanity check
+RUN $bashPath = 'C:\\msys64\\usr\\bin\\bash.exe'; \
+    if (Test-Path $bashPath) { \
+        Write-Host 'bash.exe exists'; \
+        & $bashPath --version | Write-Host; \
+    } else { \
+        throw 'bash.exe not found at sanity check!' \
     }
 
-# Install Windows SDK 10.1
-RUN Write-Host "Installing Windows SDK 10.1..."; \
-    try { \
-        choco install -y --no-progress --timeout 7200 windows-sdk-10.1; \
-        if ($LASTEXITCODE -ne 0) { Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log; Get-Content C:\Users\ContainerAdministrator\AppData\Local\Temp\chocolatey\windows-sdk-10.1.log -ErrorAction SilentlyContinue; throw "Windows SDK 10.1 installation failed with exit code $LASTEXITCODE" }; \
-    } catch { \
-        Write-Error $_.Exception.Message; \
-        exit 1 \
-    }
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=3s CMD ["C:\\msys64\\usr\\bin\\bash.exe", "--version"]
 
-# Add WinDbg to PATH (installed with Windows SDK)
-ENV PATH="C:\Program Files (x86)\Windows Kits\10\Debuggers\x64;C:\Program Files (x86)\Windows Kits\10\Debuggers\x86;${PATH}"
+# Default command
+CMD ["C:\\msys64\\usr\\bin\\bash.exe", "-l"]
 
-# Verify working directory
-WORKDIR C:/dev
-
-# Default to PowerShell
-CMD ["powershell", "-NoExit", "-Command", "$PSVersionTable"]
+# Usage: docker run -it <image-name>
