@@ -1,0 +1,11 @@
+# Extend the base Windows-native image
+FROM africanfuture/windows-devbox-base:latest
+
+# Install build tools and Windows SDK
+RUN choco install -y --no-progress --timeout 2700 \
+    visualstudio2022buildtools \
+    windows-sdk-10.0; \
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+# Default to PowerShell
+CMD ["powershell", "-NoExit", "-Command", "$PSVersionTable"]
