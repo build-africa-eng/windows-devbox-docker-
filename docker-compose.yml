@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  devbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: windows-devbox:latest
+    stdin_open: true
+    tty: true
+    isolation: process
