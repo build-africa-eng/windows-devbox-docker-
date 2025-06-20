@@ -26,7 +26,7 @@ RUN choco install -y --no-progress --timeout 2700 \
 
 # Create a working development directory
 RUN New-Item -ItemType Directory -Path C:\dev -Force
-WORKDIR C:\dev
+WORKDIR C:/dev
 
 # Default to PowerShell for Windows-native experience
 CMD ["powershell", "-NoExit", "-Command", "$PSVersionTable"]
