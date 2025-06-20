@@ -1,11 +1,13 @@
 # Extend the base Windows-native image
-FROM africanfuture/windows-devbox-base:latest
+FROM ${DOCKERHUB_USERNAME}/windows-devbox-base:latest
 
-# Install build tools and Windows SDK
-RUN choco install -y --no-progress --timeout 2700 \
-    visualstudio2022buildtools \
-    windows-sdk-10.0; \
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# Install build tools and Windows SDK with retry logic
+RUN choco install -y --no-progress --timeout 3600 \
+    visualstudio2022buildtools; \
+    if ($LASTEXITCODE -ne 0) { Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log; exit $LASTEXITCODE }; \
+    choco install -y --no-progress --timeout 3600 \
+    windows-sdk-10.0 --ignore-checksums; \
+    if ($LASTEXITCODE -ne 0) { Get-Content C:\ProgramData\chocolatey\logs\windows-sdk-10.0.log; exit $LASTEXITCODE }
 
 # Default to PowerShell
 CMD ["powershell", "-NoExit", "-Command", "$PSVersionTable"]
