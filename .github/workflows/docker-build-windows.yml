@@ -1,19 +1,57 @@
-name: Build and Push Windows Dev Docker Image
+name: Build and Push Windows Dev Docker Images
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
-      - Dockerfile
-      - .github/workflows/docker-build-windows.yml
+      - 'Dockerfile.base'
+      - 'Dockerfile.dev-tools'
+      - 'Dockerfile.build-tools'
+      - 'Dockerfile.debug-tools'
+      - '.github/workflows/docker-build-windows.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Dockerfile.base'
+      - 'Dockerfile.dev-tools'
+      - 'Dockerfile.build-tools'
+      - 'Dockerfile.debug-tools'
+      - '.github/workflows/docker-build-windows.yml'
 
 jobs:
-  build:
+  build-base:
     runs-on: windows-2022
-
+    timeout-minutes: 30
     env:
-      IMAGE_NAME: windows-devbox
+      IMAGE_NAME: windows-devbox-base
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      - name: Test network connectivity
+        run: curl -I https://community.chocolatey.org/install.ps1
+
+      - name: Check system resources
+        run: systeminfo
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build base image
+        run: docker build -f Dockerfile.base -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
+
+      - name: Push base image
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+
+  build-dev-tools:
+    needs: build-base
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      IMAGE_NAME: windows-devbox-dev-tools
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,10 +62,52 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build Docker image
-        run: |
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
+      - name: Build dev-tools image
+        run: docker build -f Dockerfile.dev-tools -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
 
-      - name: Push to Docker Hub
-        run: |
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+      - name: Push dev-tools image
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+
+  build-build-tools:
+    needs: build-base
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      IMAGE_NAME: windows-devbox-build-tools
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build build-tools image
+        run: docker build -f Dockerfile.build-tools -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
+
+      - name: Push build-tools image
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+
+  build-debug-tools:
+    needs: build-base
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      IMAGE_NAME: windows-devbox-debug-tools
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build debug-tools image
+        run: docker build -f Dockerfile.debug-tools -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
+
+      - name: Push debug-tools image
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
