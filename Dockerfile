@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/windows/servercore:20348
+FROM mcr.microsoft.com/dotnet/sdk:5.0
 
 SHELL ["powershell", "-Command"]
 
