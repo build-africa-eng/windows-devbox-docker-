@@ -1,5 +1,5 @@
 # Extend the base Windows-native image
-FROM ${DOCKERHUB_USERNAME}/windows-devbox-base:latest
+FROM africanfuture/windows-devbox-base:latest
 
 # Install build tools and Windows SDK with retry logic
 RUN choco install -y --no-progress --timeout 3600 \
