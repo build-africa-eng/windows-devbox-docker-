@@ -1,13 +1,13 @@
-# Use Windows Server 2022 base (compatible with GitHub Actions runners)
+# Use a compatible Windows Server 2022 base image
 FROM mcr.microsoft.com/windows/servercore:20348
 
-# Set PowerShell as the default shell
+# Set PowerShell as default shell
 SHELL ["powershell", "-Command"]
 
-# Set TLS 1.2 and install Chocolatey
-RUN Set-ExecutionPolicy Bypass -Scope Process -Force ; `
-    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 ; `
-    iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+# Install Chocolatey with TLS 1.2 enabled
+RUN powershell -Command "Set-ExecutionPolicy Bypass -Scope Process -Force; `
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; `
+    iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
 
 # Add Chocolatey to PATH
 ENV PATH="C:\\ProgramData\\chocolatey\\bin;${PATH}"
@@ -56,9 +56,9 @@ RUN Invoke-WebRequest https://cygwin.com/setup-x86_64.exe -OutFile cygwin.exe ; 
 
 ENV PATH="C:\\cygwin64\\bin;${PATH}"
 
-# Create a working directory
+# Create a working development directory
 RUN mkdir C:\\dev
 WORKDIR C:\\dev
 
-# Launch MSYS2 Bash shell by default
+# Default shell: MSYS2 Bash
 CMD ["C:\\msys64\\usr\\bin\\bash.exe", "--login", "-i"]
