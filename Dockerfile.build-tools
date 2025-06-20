@@ -1,13 +1,38 @@
 # Extend the base Windows-native image
 FROM africanfuture/windows-devbox-base:latest
 
-# Install build tools and Windows SDK with retry logic
-RUN choco install -y --no-progress --timeout 3600 \
-    visualstudio2022buildtools; \
-    if ($LASTEXITCODE -ne 0) { Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log; exit $LASTEXITCODE }; \
-    choco install -y --no-progress --timeout 3600 \
-    windows-sdk-10.0 --ignore-checksums; \
-    if ($LASTEXITCODE -ne 0) { Get-Content C:\ProgramData\chocolatey\logs\windows-sdk-10.0.log; exit $LASTEXITCODE }
+# Set PowerShell as default shell
+SHELL ["powershell", "-Command"]
+
+# Check disk space before installation
+RUN Write-Host "Checking disk space..."; \
+    dir C:\; \
+    if ((Get-PSDrive C).Free -lt 20GB) { Write-Error "Insufficient disk space on C: drive"; exit 1 }
+
+# Download and install Visual Studio Build Tools manually
+RUN Write-Host "Downloading Visual Studio Build Tools..."; \
+    Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vs_BuildTools.exe" -OutFile "C:\vs_BuildTools.exe" -UseBasicParsing; \
+    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to download vs_BuildTools.exe"; exit $LASTEXITCODE }; \
+    Write-Host "Installing Visual Studio Build Tools..."; \
+    Start-Process -FilePath "C:\vs_BuildTools.exe" \
+        -ArgumentList "--quiet --wait --norestart --nocache --installPath C:\BuildTools --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools --add Microsoft.VisualStudio.Workload.NetCoreBuildTools --includeRecommended" \
+        -NoNewWindow -Wait; \
+    if ($LASTEXITCODE -ne 0) { Write-Error "Visual Studio Build Tools installation failed"; exit $LASTEXITCODE }; \
+    Remove-Item "C:\vs_BuildTools.exe" -Force
+
+# Install Windows SDK with retry logic
+RUN Write-Host "Installing Windows SDK..."; \
+    choco install -y --no-progress --timeout 3600 windows-sdk-10.0 --ignore-checksums; \
+    if ($LASTEXITCODE -ne 0) { \
+        Get-Content C:\ProgramData\chocolatey\logs\windows-sdk-10.0.log; \
+        Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log; \
+        exit $LASTEXITCODE }
+
+# Add WinDbg to PATH (installed with Windows SDK)
+ENV PATH="C:\Program Files (x86)\Windows Kits\10\Debuggers\x64;C:\Program Files (x86)\Windows Kits\10\Debuggers\x86;${PATH}"
+
+# Verify working directory
+WORKDIR C:/dev
 
 # Default to PowerShell
 CMD ["powershell", "-NoExit", "-Command", "$PSVersionTable"]
