@@ -7,7 +7,7 @@ SHELL ["powershell", "-Command"]
 # Check disk space before installation
 RUN Write-Host "Checking disk space..."; \
     dir C:\; \
-    if ((Get-PSDrive C).Free -lt 20GB) { Write-Error "Insufficient disk space on C: drive"; exit 1 }
+    if ((Get-PSDrive C).Free -lt 25GB) { Write-Error "Insufficient disk space on C: drive (<25GB)"; exit 1 }
 
 # Download and install Visual Studio Build Tools manually
 RUN Write-Host "Downloading Visual Studio Build Tools..."; \
@@ -16,17 +16,17 @@ RUN Write-Host "Downloading Visual Studio Build Tools..."; \
     Write-Host "Installing Visual Studio Build Tools..."; \
     Start-Process -FilePath "C:\vs_BuildTools.exe" \
         -ArgumentList "--quiet --wait --norestart --nocache --installPath C:\BuildTools --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools --add Microsoft.VisualStudio.Workload.NetCoreBuildTools --includeRecommended" \
-        -NoNewWindow -Wait; \
-    if ($LASTEXITCODE -ne 0) { Write-Error "Visual Studio Build Tools installation failed"; exit $LASTEXITCODE }; \
-    Remove-Item "C:\vs_BuildTools.exe" -Force
+        -NoNewWindow -Wait -RedirectStandardOutput "C:\vs_install.log" -RedirectStandardError "C:\vs_error.log"; \
+    if ($LASTEXITCODE -ne 0) { Get-Content C:\vs_install.log; Get-Content C:\vs_error.log; Write-Error "Visual Studio Build Tools installation failed"; exit $LASTEXITCODE }; \
+    Remove-Item "C:\vs_BuildTools.exe", "C:\vs_install.log", "C:\vs_error.log" -Force -ErrorAction SilentlyContinue
 
-# Install Windows SDK with retry logic
-RUN Write-Host "Installing Windows SDK..."; \
-    choco install -y --no-progress --timeout 3600 windows-sdk-10.0 --ignore-checksums; \
+# Install Windows SDK 10.1 as alternative
+RUN Write-Host "Installing Windows SDK 10.1..."; \
+    choco install -y --no-progress --timeout 7200 windows-sdk-10.1; \
     if ($LASTEXITCODE -ne 0) { \
-        Get-Content C:\ProgramData\chocolatey\logs\windows-sdk-10.0.log; \
         Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log; \
-        exit $LASTEXITCODE }
+        Get-Content C:\Users\ContainerAdministrator\AppData\Local\Temp\chocolatey\windows-sdk-10.1.log -ErrorAction SilentlyContinue; \
+        Write-Error "Windows SDK 10.1 installation failed"; exit $LASTEXITCODE }
 
 # Add WinDbg to PATH (installed with Windows SDK)
 ENV PATH="C:\Program Files (x86)\Windows Kits\10\Debuggers\x64;C:\Program Files (x86)\Windows Kits\10\Debuggers\x86;${PATH}"
