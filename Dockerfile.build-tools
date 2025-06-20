@@ -19,48 +19,23 @@ RUN Write-Host "Downloading Visual Studio Build Tools..."; \
         exit 1 \
     }
 
-# Install Visual Studio Build Tools
-RUN Write-Host "Installing Visual Studio Build Tools..."; \
-    $process = Start-Process -FilePath "C:\vs_BuildTools.exe" -ArgumentList @( \
-        '--quiet', \
-        '--wait', \
-        '--norestart', \
-        '--nocache', \
-        '--installPath', 'C:\BuildTools', \
-        '--add', 'Microsoft.VisualStudio.Workload.VCTools', \
-        '--add', 'Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools', \
-        '--add', 'Microsoft.VisualStudio.Workload.NetCoreBuildTools', \
-        '--includeRecommended' \
-    ) -Wait -PassThru; \
-    if ($process.ExitCode -ne 0) { \
-        Write-Host "##[error]Visual Studio Build Tools installation failed with exit code $($process.ExitCode)."; \
-        $logPath = "$env:TEMP\dd_setup*.log"; \
-        $logs = Get-Item -Path $logPath -ErrorAction SilentlyContinue; \
-        if ($logs) { \
-            Write-Host "Installer logs found at $($logs.FullName):"; \
-            Get-Content -Path $logs.FullName | Write-Host; \
-        } else { \
-            Write-Host "##[warning]Could not find Visual Studio installer logs at '$logPath'."; \
-        } \
-        exit $process.ExitCode; \
-    }; \
-    Remove-Item "C:\vs_BuildTools.exe" -Force -ErrorAction SilentlyContinue; \
-    # Clean up installer cache to reduce image size
-    Remove-Item "C:\Program Files (x86)\Microsoft Visual Studio\Installer" -Recurse -Force -ErrorAction SilentlyContinue; \
-    Remove-Item "C:\ProgramData\Microsoft\VisualStudio" -Recurse -Force -ErrorAction SilentlyContinue
+# Install Visual Studio Build Tools by copying and running a dedicated script
+COPY install-vs.ps1 C:/temp/install-vs.ps1
+RUN powershell.exe -ExecutionPolicy Bypass -File C:/temp/install-vs.ps1; \
+    Remove-Item C:/temp/install-vs.ps1 -Force
 
-# Install Windows SDK 10.1
+# Install Windows SDK 10.1 with improved error handling
 RUN Write-Host "Installing Windows SDK 10.1..."; \
-    try { \
-        choco install -y --no-progress --timeout 7200 windows-sdk-10.1; \
-        if ($LASTEXITCODE -ne 0) { Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log; Get-Content C:\Users\ContainerAdministrator\AppData\Local\Temp\chocolatey\windows-sdk-10.1.log -ErrorAction SilentlyContinue; throw "Windows SDK 10.1 installation failed with exit code $LASTEXITCODE" }; \
-    } catch { \
-        Write-Error $_.Exception.Message; \
-        exit 1 \
+    choco install -y --no-progress --timeout 7200 windows-sdk-10.1; \
+    if ($LASTEXITCODE -ne 0) { \
+        Write-Host "##[error]Windows SDK 10.1 installation failed with exit code $LASTEXITCODE."; \
+        Write-Host "Displaying Chocolatey log:"; \
+        Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log -ErrorAction SilentlyContinue | Write-Host; \
+        exit $LASTEXITCODE; \
     }
 
 # Add WinDbg to PATH (installed with Windows SDK)
-ENV PATH="C:\Program Files (x86)\Windows Kits\10\Debuggers\x64;C:\Program Files (x86)\Windows Kits\10\Debuggers\x86;${env:PATH}"
+ENV PATH="C:\Program Files (x86)\Windows Kits\10\Debuggers\x64;C:\Program Files (x86)\Windows Kits\10\Debuggers\x86;${PATH}"
 
 # Verify working directory
 WORKDIR C:/dev
