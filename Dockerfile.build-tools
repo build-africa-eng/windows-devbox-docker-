@@ -1,32 +1,43 @@
-# Extend the base Windows-native image
-FROM africanfuture/windows-devbox-base:latest
+# Step 1: Use a temporary build stage to download and install tools
+FROM africanfuture/windows-devbox-base:latest as builder
 
-# Set PowerShell as default shell
+# Set PowerShell as the default shell
 SHELL ["powershell", "-Command"]
 
-# Check disk space before installation
+# 1. Check for adequate disk space before starting
 RUN Write-Host "Checking disk space..."; \
-    $freeSpace = (Get-PSDrive C).Free / 1GB; \
-    Write-Host "Free space on C: is $($freeSpace)GB"; \
-    if ($freeSpace -lt 25) { Write-Error "Insufficient disk space on C: drive (<25GB)"; exit 1 }
-
-# Download Visual Studio Build Tools
-RUN Write-Host "Downloading Visual Studio Build Tools..."; \
-    try { \
-        Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vs_BuildTools.exe" -OutFile "C:\vs_BuildTools.exe" -UseBasicParsing -ErrorAction Stop; \
-    } catch { \
-        Write-Error $_.Exception.Message; \
-        exit 1 \
+    $freeSpace = [Math]::Round((Get-PSDrive C).Free / 1GB, 2); \
+    Write-Host "Free space on C: drive is $freeSpace GB."; \
+    if ($freeSpace -lt 25) { \
+        Write-Error "Insufficient disk space. At least 25 GB is required."; \
+        exit 1; \
     }
 
-# Install Visual Studio Build Tools by copying and running a dedicated script
-COPY install-vs.ps1 C:/temp/install-vs.ps1
-RUN powershell.exe -ExecutionPolicy Bypass -File C:/temp/install-vs.ps1; \
-    Remove-Item C:/temp/install-vs.ps1 -Force
+# 2. Download Visual Studio Build Tools with robust error handling
+RUN Write-Host "Downloading Visual Studio Build Tools..."; \
+    $vs_installer_uri = "https://aka.ms/vs/17/release/vs_BuildTools.exe"; \
+    $vs_installer_path = "C:\temp\vs_BuildTools.exe"; \
+    New-Item -ItemType Directory -Path "C:\temp" -Force | Out-Null; \
+    try { \
+        Invoke-WebRequest -Uri $vs_installer_uri -OutFile $vs_installer_path -UseBasicParsing -ErrorAction Stop; \
+        Write-Host "Download completed successfully."; \
+    } catch { \
+        Write-Error "Failed to download Visual Studio Build Tools. Error: $($_.Exception.Message)"; \
+        exit 1; \
+    }
 
-# Install Windows SDK 10.1 with improved error handling
+# 3. Copy the installer script and execute the VS Build Tools installation
+COPY install-vs.ps1 C:/temp/install-vs.ps1
+RUN Write-Host "Starting Visual Studio Build Tools installation..."; \
+    powershell.exe -ExecutionPolicy Bypass -File C:/temp/install-vs.ps1; \
+    if ($LASTEXITCODE -ne 0) { \
+        Write-Error "Visual Studio Build Tools installation failed."; \
+        exit $LASTEXITCODE; \
+    }
+
+# 4. Install Windows SDK 10.1 using Chocolatey with corrected error handling
 RUN Write-Host "Installing Windows SDK 10.1..."; \
-    choco install -y --no-progress --timeout 7200 windows-sdk-10.1; \
+    choco install windows-sdk-10.1 -y --no-progress --timeout=7200; \
     if ($LASTEXITCODE -ne 0) { \
         Write-Host "##[error]Windows SDK 10.1 installation failed with exit code $LASTEXITCODE."; \
         Write-Host "Displaying Chocolatey log:"; \
@@ -34,11 +45,18 @@ RUN Write-Host "Installing Windows SDK 10.1..."; \
         exit $LASTEXITCODE; \
     }
 
-# Add WinDbg to PATH (installed with Windows SDK)
-ENV PATH="C:\Program Files (x86)\Windows Kits\10\Debuggers\x64;C:\Program Files (x86)\Windows Kits\10\Debuggers\x86;${PATH}"
+# Step 2: Create the final, clean image
+FROM africanfuture/windows-devbox-base:latest
 
-# Verify working directory
+# Copy installed tools from the builder stage to the final image
+COPY --from=builder ["/Program Files (x86)/Microsoft Visual Studio", "/Program Files (x86)/Microsoft Visual Studio"]
+COPY --from=builder ["/Program Files (x86)/Windows Kits", "/Program Files (x86)/Windows Kits"]
+
+# Set the PATH environment variable to include MSBuild and WinDbg
+ENV PATH="C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\MSBuild\\Current\\Bin;C:\\Program Files (x86)\\Windows Kits\\10\\Debuggers\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\Debuggers\\x86;${env:PATH}"
+
+# Set working directory
 WORKDIR C:/dev
 
-# Default to PowerShell
-CMD ["powershell", "-NoExit", "-Command", "$PSVersionTable"]
+# Default command to start PowerShell and show version info
+CMD ["powershell", "-NoExit", "-Command", "Write-Host 'Windows DevBox Environment Ready.'; $PSVersionTable"]
