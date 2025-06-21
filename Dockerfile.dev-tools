@@ -5,7 +5,7 @@ FROM africanfuture/windows-devbox-base:latest
 SHELL ["powershell", "-Command"]
 
 # Install development tools
-RUN choco install -y --no-progress --timeout 2700 --debug --verbose \
+RUN choco install -y --no-progress --timeout 2700 \
     nodejs-lts \
     python \
     dotnet-sdk \
@@ -15,8 +15,7 @@ RUN choco install -y --no-progress --timeout 2700 --debug --verbose \
     make \
     winrar \
     unzip; \
-    if ($LASTEXITCODE -ne 0) { Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log; exit $LASTEXITCODE }; \
-    Remove-Item C:\Temp\choco-cache -Recurse -Force -ErrorAction SilentlyContinue
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # Default to PowerShell
 CMD ["powershell", "-NoExit", "-Command", "$PSVersionTable"]
