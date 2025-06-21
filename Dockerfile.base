@@ -17,13 +17,17 @@ RUN Set-ExecutionPolicy Bypass -Scope Process -Force; \
     choco feature disable --name showNonElevatedWarnings; \
     if (-not (Get-Command choco -ErrorAction SilentlyContinue)) { Write-Error 'Chocolatey not found in PATH'; exit 1 }
 
-# Install core CLI tools, OpenJDK 21, and Unix-like tools
-RUN choco install -y --no-progress --timeout 2700 \
+# Install core CLI tools and OpenJDK 21 (split for debugging)
+RUN choco install -y --no-progress --timeout 2700 --debug --verbose \
     git \
     7zip \
     curl \
-    wget \
-    openjdk --version=21.0.4 \
+    wget; \
+    if ($LASTEXITCODE -ne 0) { Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log; exit $LASTEXITCODE }; \
+    choco install -y --no-progress --timeout 2700 --debug --verbose \
+    openjdk --version=21.0.4; \
+    if ($LASTEXITCODE -ne 0) { Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log; exit $LASTEXITCODE }; \
+    choco install -y --no-progress --timeout 2700 --debug --verbose \
     oh-my-posh \
     jq \
     tree \
@@ -31,9 +35,11 @@ RUN choco install -y --no-progress --timeout 2700 \
     gnuwin32-coreutils \
     grep \
     sed \
-    awk \
-    nano.install; \
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; \
+    gawk \
+    nano.install \
+    findutils \
+    dos2unix; \
+    if ($LASTEXITCODE -ne 0) { Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log; exit $LASTEXITCODE }; \
     Remove-Item C:\Temp\choco-cache -Recurse -Force -ErrorAction SilentlyContinue
 
 # Apply Windows updates
@@ -56,7 +62,7 @@ RUN New-Item -ItemType Directory -Path $env:USERPROFILE\Documents\PowerShell -Fo
     Add-Content -Path $env:USERPROFILE\Documents\PowerShell\Microsoft.PowerShell_profile.ps1 -Value "Set-Alias ll dir; Set-Alias la dir";
 
 # Healthcheck for key tools
-HEALTHCHECK CMD powershell -Command "java -version; git --version; grep --version; jq --version"
+HEALTHCHECK CMD powershell -Command "java -version; git --version; grep --version; jq --version; gawk --version"
 
 # Default to PowerShell
 CMD ["powershell", "-NoExit", "-Command", "$PSVersionTable"]
