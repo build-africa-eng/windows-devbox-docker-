@@ -28,7 +28,7 @@ try {
 } catch {
     # This block runs if Start-Process fails or if the 'throw' above is executed
     Write-Host "##[error]An error occurred during Visual Studio Build Tools installation."
-    
+
     # Attempt to find and display the official installer logs for debugging
     $logPath = "$env:TEMP\dd_setup*.log"
     $logs = Get-Item -Path $logPath -ErrorAction SilentlyContinue
