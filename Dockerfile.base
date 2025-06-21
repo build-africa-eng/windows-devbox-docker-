@@ -4,7 +4,7 @@ FROM mcr.microsoft.com/windows/servercore:ltsc2022
 # Set PowerShell as default shell
 SHELL ["powershell", "-Command"]
 
-# Install Chocolatey with TLS 1.2 enabled, non-interactively
+# Install Chocolatey with TLS 1.2, cache, and non-interactive setup
 RUN Set-ExecutionPolicy Bypass -Scope Process -Force; \
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; \
     Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')); \
@@ -12,24 +12,51 @@ RUN Set-ExecutionPolicy Bypass -Scope Process -Force; \
     $env:PATH = 'C:\ProgramData\chocolatey\bin;' + $env:PATH; \
     [System.Environment]::SetEnvironmentVariable('PATH', $env:PATH, [System.EnvironmentVariableTarget]::Machine); \
     choco config set --name commandExecutionTimeoutSeconds --value 2700; \
+    choco config set --name cacheLocation --value C:\Temp\choco-cache; \
     choco feature enable --name allowGlobalConfirmation; \
     choco feature disable --name showNonElevatedWarnings; \
     if (-not (Get-Command choco -ErrorAction SilentlyContinue)) { Write-Error 'Chocolatey not found in PATH'; exit 1 }
 
-# Install core Windows-native tools
+# Install core CLI tools, OpenJDK 21, and Unix-like tools
 RUN choco install -y --no-progress --timeout 2700 \
     git \
     7zip \
     curl \
-    wget; \
+    wget \
+    openjdk --version=21.0.4 \
+    oh-my-posh \
+    jq \
+    tree \
+    pandoc \
+    gnuwin32-coreutils \
+    grep \
+    sed \
+    awk \
+    nano.install; \
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; \
+    Remove-Item C:\Temp\choco-cache -Recurse -Force -ErrorAction SilentlyContinue
+
+# Apply Windows updates
+RUN Install-Module -Name PSWindowsUpdate -Force -Scope CurrentUser; \
+    Install-WindowsUpdate -AcceptAll -AutoReboot:$false; \
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# Create a working development directory and verify
+# Verify Java installation
+RUN java -version
+
+# Create working directory
 RUN New-Item -ItemType Directory -Path C:\dev -Force; \
     if (-not (Test-Path C:\dev)) { Write-Error 'Failed to create C:\dev directory'; exit 1 }
 
 # Set working directory
 WORKDIR C:/dev
 
-# Default to PowerShell for Windows-native experience
+# Add PowerShell aliases
+RUN New-Item -ItemType Directory -Path $env:USERPROFILE\Documents\PowerShell -Force; \
+    Add-Content -Path $env:USERPROFILE\Documents\PowerShell\Microsoft.PowerShell_profile.ps1 -Value "Set-Alias ll dir; Set-Alias la dir";
+
+# Healthcheck for key tools
+HEALTHCHECK CMD powershell -Command "java -version; git --version; grep --version; jq --version"
+
+# Default to PowerShell
 CMD ["powershell", "-NoExit", "-Command", "$PSVersionTable"]
