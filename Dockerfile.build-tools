@@ -1,37 +1,61 @@
+# Extend the base Windows-native image
 FROM africanfuture/windows-devbox-base:latest
 
+# Set PowerShell as default shell
 SHELL ["powershell", "-Command"]
 
-# Check disk space
+# Check disk space before installation
 RUN Write-Host "Checking disk space..."; \
     $freeSpace = (Get-PSDrive C).Free / 1GB; \
-    Write-Host "Free space: $freeSpace GB"; \
-    if ($freeSpace -lt 25) { Write-Error "Insufficient disk space (<25GB)"; exit 1 }
+    Write-Host "Free space on C: $freeSpace GB"; \
+    if ($freeSpace -lt 25) { Write-Error "Insufficient disk space on C: drive (<25GB)"; exit 1 }
 
-# Download and install Visual Studio Build Tools
-RUN Write-Host "Downloading Visual Studio Build Tools..."; \
-    Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vs_BuildTools.exe" -OutFile "C:\vs_BuildTools.exe" -UseBasicParsing; \
-    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to download vs_BuildTools.exe"; exit $LASTEXITCODE }; \
-    Write-Host "Installing Visual Studio Build Tools..."; \
-    Start-Process -FilePath "C:\vs_BuildTools.exe" `
-        -ArgumentList "--quiet --wait --norestart --nocache --installPath C:\BuildTools --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools --add Microsoft.VisualStudio.Workload.NetCoreBuildTools --includeRecommended" `
-        -NoNewWindow -Wait -RedirectStandardOutput "C:\vs_install.log" -RedirectStandardError "C:\vs_error.log"; \
-    if ($LASTEXITCODE -ne 0) { \
-        Write-Host "Visual Studio installation failed"; \
-        Get-Content C:\vs_install.log -ErrorAction SilentlyContinue; \
-        Get-Content C:\vs_error.log -ErrorAction SilentlyContinue; \
-        Write-Error "Visual Studio Build Tools installation failed"; \
-        exit $LASTEXITCODE }; \
-    Remove-Item "C:\vs_BuildTools.exe", "C:\vs_install.log", "C:\vs_error.log" -Force -ErrorAction SilentlyContinue
+# Download Visual Studio Build Tools
+RUN try { \
+        Write-Host "Downloading Visual Studio Build Tools..."; \
+        Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vs_BuildTools.exe" `
+                          -OutFile "C:\vs_BuildTools.exe" `
+                          -UseBasicParsing -ErrorAction Stop; \
+    } catch { \
+        Write-Host "##[error] Download failed: $($_.Exception.Message)"; \
+        exit 1; \
+    }
 
-# Install Windows SDK 10.1
-RUN Write-Host "Installing Windows SDK 10.1..."; \
-    choco install -y --no-progress --timeout 7200 windows-sdk-10.1; \
-    if ($LASTEXITCODE -ne 0) { \
-        Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log -ErrorAction SilentlyContinue; \
-        Get-Content C:\Users\ContainerAdministrator\AppData\Local\Temp\chocolatey\windows-sdk-10.1.log -ErrorAction SilentlyContinue; \
-        Write-Error "Windows SDK 10.1 installation failed"; \
-        exit $LASTEXITCODE }
+# Copy and install Visual Studio Build Tools using script
+COPY install-vs.ps1 C:/temp/install-vs.ps1
+
+RUN try { \
+        Write-Host "Running Visual Studio Build Tools installation script..."; \
+        powershell.exe -ExecutionPolicy Bypass -File "C:/temp/install-vs.ps1"; \
+        if ($LASTEXITCODE -ne 0) { throw "install-vs.ps1 failed with exit code $LASTEXITCODE" }; \
+    } catch { \
+        Write-Host "##[error] VS install script failed: $($_.Exception.Message)"; \
+        exit 1; \
+    } finally { \
+        Remove-Item "C:/temp/install-vs.ps1","C:\vs_BuildTools.exe","C:\vs_install.log","C:\vs_error.log" -Force -ErrorAction SilentlyContinue; \
+    }
+
+# Install Windows SDK 10.1 with retry logic
+RUN try { \
+        Write-Host "Installing Windows SDK 10.1..."; \
+        $retryCount = 0; \
+        do { \
+            choco install -y --no-progress --timeout 7200 windows-sdk-10.1; \
+            if ($LASTEXITCODE -eq 0) { break }; \
+            Write-Host "##[warning] SDK install failed on attempt $retryCount. Retrying..."; \
+            $retryCount++; \
+            Start-Sleep -Seconds 30; \
+        } while ($retryCount -lt 3); \
+        if ($LASTEXITCODE -ne 0) { \
+            Write-Host "##[error] SDK installation failed after retries (exit code $LASTEXITCODE)"; \
+            Get-Content 'C:\ProgramData\chocolatey\logs\chocolatey.log' -ErrorAction SilentlyContinue | Write-Host; \
+            Get-Content 'C:\Users\ContainerAdministrator\AppData\Local\Temp\chocolatey\windows-sdk-10.1.log' -ErrorAction SilentlyContinue | Write-Host; \
+            throw "SDK installation failed"; \
+        } \
+    } catch { \
+        Write-Host "##[error] SDK install catch block: $($_.Exception.Message)"; \
+        exit 1; \
+    }
 
 # Add WinDbg to PATH
 ENV PATH="C:\Program Files (x86)\Windows Kits\10\Debuggers\x64;C:\Program Files (x86)\Windows Kits\10\Debuggers\x86;${PATH}"
