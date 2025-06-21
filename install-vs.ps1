@@ -1,51 +1,53 @@
-# This script installs Visual Studio Build Tools and performs robust error checking.
+# install-vs.ps1
+# This script installs Visual Studio 2022 Build Tools with specified workloads.
 
-Write-Host "Starting Visual Studio Build Tools installation..."
-$ErrorActionPreference = "Stop" # Make the script exit on any error
+$installerPath = "C:\temp\vs_BuildTools.exe"
+$installPath = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools"
+$logPath = "C:\temp\vs_install.log"
+$errorLogPath = "C:\temp\vs_error.log"
 
-try {
-    # Execute the installer and wait for it to complete
-    $process = Start-Process -FilePath "C:\vs_BuildTools.exe" -ArgumentList @(
-        '--quiet',
-        '--wait',
-        '--norestart',
-        '--nocache',
-        '--installPath', 'C:\BuildTools',
-        '--add', 'Microsoft.VisualStudio.Workload.VCTools',
-        '--add', 'Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools',
-        '--add', 'Microsoft.VisualStudio.Workload.NetCoreBuildTools',
-        '--includeRecommended'
-    ) -Wait -PassThru
-
-    # Check the exit code from the installer
-    if ($process.ExitCode -ne 0) {
-        # Create a specific error message and throw an exception, which will be caught by the 'catch' block
-        throw "Visual Studio installer failed with exit code $($process.ExitCode)"
-    }
-
-    Write-Host "Visual Studio Build Tools installed successfully."
-
-} catch {
-    # This block runs if Start-Process fails or if the 'throw' above is executed
-    Write-Host "##[error]An error occurred during Visual Studio Build Tools installation."
-
-    # Attempt to find and display the official installer logs for debugging
-    $logPath = "$env:TEMP\dd_setup*.log"
-    $logs = Get-Item -Path $logPath -ErrorAction SilentlyContinue
-
-    if ($logs) {
-        Write-Host "Installer logs found at $($logs.FullName):"
-        Get-Content -Path $logs.FullName | Write-Host
-    } else {
-        Write-Host "##[warning]Could not find Visual Studio installer logs at '$logPath'."
-    }
-
-    # Exit with a non-zero code to fail the Docker build
+# Check if the installer exists
+if (-not (Test-Path $installerPath)) {
+    Write-Error "Visual Studio installer not found at $installerPath"
     exit 1
-} finally {
-    # This block runs regardless of success or failure, ensuring cleanup happens
-    Write-Host "Cleaning up installer and cache files..."
-    Remove-Item "C:\vs_BuildTools.exe" -Force -ErrorAction SilentlyContinue
-    Remove-Item "C:\Program Files (x86)\Microsoft Visual Studio\Installer" -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item "C:\ProgramData\Microsoft\VisualStudio" -Recurse -Force -ErrorAction SilentlyContinue
 }
+
+# Define the workloads required for C++, .NET Desktop, and .NET Core build tools.
+$workloads = @(
+    "--add Microsoft.VisualStudio.Workload.VCTools",
+    "--add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools",
+    "--add Microsoft.VisualStudio.Workload.NetCoreBuildTools",
+    "--includeRecommended"
+)
+
+# Construct the command-line arguments
+$arguments = @(
+    "--quiet",
+    "--wait",
+    "--norestart",
+    "--nocache",
+    "--installPath `"$installPath`""
+) + $workloads
+
+Write-Host "Starting installation with arguments: $($arguments -join ' ')"
+
+# Execute the installer and wait for it to complete
+$process = Start-Process -FilePath $installerPath -ArgumentList $arguments -NoNewWindow -Wait -PassThru -RedirectStandardOutput $logPath -RedirectStandardError $errorLogPath
+
+# Check the exit code of the installer
+if ($process.ExitCode -ne 0) {
+    Write-Error "Installation failed with exit code $($process.ExitCode)."
+    Write-Host "Displaying install log:"
+    Get-Content $logPath -ErrorAction SilentlyContinue | Write-Host
+    Write-Host "Displaying error log:"
+    Get-Content $errorLogPath -ErrorAction SilentlyContinue | Write-Host
+    exit $process.ExitCode
+}
+
+Write-Host "Visual Studio Build Tools installed successfully."
+
+# Clean up installer files after a successful installation
+Write-Host "Cleaning up installer..."
+Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
+
+exit 0
