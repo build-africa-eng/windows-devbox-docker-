@@ -10,27 +10,9 @@ RUN Write-Host "Checking disk space..."; \
     Write-Host "Free space on C: $freeSpace GB"; \
     if ($freeSpace -lt 25) { Write-Error "Insufficient disk space on C: drive (<25GB)"; exit 1 }
 
-# Download Visual Studio Build Tools
-RUN Write-Host "Downloading Visual Studio Build Tools..."; \
-    try { \
-        Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vs_BuildTools.exe" -OutFile "C:\vs_BuildTools.exe" -UseBasicParsing -ErrorAction Stop; \
-    } catch { \
-        Write-Host "##[error]Error: $($_.Exception.Message)"; \
-        exit 1 \
-    }
-
-# Install Visual Studio Build Tools by copying and running a dedicated script
-COPY install-vs.ps1 C:/temp/install-vs.ps1
-RUN Write-Host "Running Visual Studio Build Tools installation script..."; \
-    try { \
-        powershell.exe -ExecutionPolicy Bypass -File C:/temp/install-vs.ps1; \
-        if ($LASTEXITCODE -ne 0) { throw "install-vs.ps1 failed with exit code $LASTEXITCODE" }; \
-    } catch { \
-        Write-Host "##[error]Error: $($_.Exception.Message)"; \
-        exit 1 \
-    } finally { \
-        Remove-Item "C:/temp/install-vs.ps1", "C:\vs_BuildTools.exe", "C:\vs_install.log", "C:\vs_error.log" -Force -ErrorAction SilentlyContinue \
-    }
+# Copy download script and run it
+COPY download-vs.ps1 C:/temp/download-vs.ps1
+RUN powershell.exe -ExecutionPolicy Bypass -File C:/temp/download-vs.ps1
 
 # Install Windows SDK 10.1 with retry and fallback
 RUN Write-Host "Installing Windows SDK 10.1..."; \
@@ -39,34 +21,30 @@ RUN Write-Host "Installing Windows SDK 10.1..."; \
         do { \
             choco install -y --no-progress --timeout 7200 windows-sdk-10.1; \
             if ($LASTEXITCODE -eq 0) { break }; \
-            Write-Host "##[warning]Windows SDK 10.1 installation failed on attempt $retryCount. Retrying..."; \
+            Write-Host "##[warning]Windows SDK 10.1 install failed on attempt $retryCount. Retrying..."; \
             $retryCount++; \
             Start-Sleep -Seconds 30; \
         } while ($retryCount -lt 3); \
         if ($LASTEXITCODE -ne 0) { \
-            Write-Host "##[warning]Chocolatey installation failed. Attempting manual Windows SDK installation..."; \
+            Write-Host "##[warning]Chocolatey install failed. Trying manual SDK setup..."; \
             Invoke-WebRequest -Uri "https://download.microsoft.com/download/4/2/2/42275968/winsdksetup.exe" -OutFile "C:\winsdksetup.exe" -UseBasicParsing -ErrorAction Stop; \
-            Start-Process -FilePath "C:\winsdksetup.exe" -ArgumentList "/quiet", "/norestart" -NoNewWindow -Wait -RedirectStandardOutput "C:\sdk_install.log" -RedirectStandardError "C:\sdk_error.log"; \
+            Start-Process -FilePath "C:\winsdksetup.exe" -ArgumentList "/quiet", "/norestart" -NoNewWindow -Wait; \
             if ($LASTEXITCODE -ne 0) { \
-                Write-Host "##[error]Manual Windows SDK installation failed with exit code $LASTEXITCODE."; \
-                Get-Content C:\sdk_install.log -ErrorAction SilentlyContinue | Write-Host; \
-                Get-Content C:\sdk_error.log -ErrorAction SilentlyContinue | Write-Host; \
-                throw "Manual Windows SDK installation failed with exit code $LASTEXITCODE"; \
+                Write-Host "##[error]Manual SDK install failed with exit code $LASTEXITCODE"; \
+                throw "Manual Windows SDK install failed" \
             }; \
-            Remove-Item "C:\winsdksetup.exe", "C:\sdk_install.log", "C:\sdk_error.log" -Force -ErrorAction SilentlyContinue; \
+            Remove-Item "C:\winsdksetup.exe" -Force -ErrorAction SilentlyContinue; \
         } \
     } catch { \
-        Write-Host "##[error]Error: $($_.Exception.Message)"; \
-        Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log -ErrorAction SilentlyContinue | Write-Host; \
-        Get-Content C:\Users\ContainerAdministrator\AppData\Local\Temp\chocolatey\windows-sdk-10.1.log -ErrorAction SilentlyContinue | Write-Host; \
+        Write-Host "##[error] $($_.Exception.Message)"; \
         exit 1 \
     }
 
 # Add WinDbg to PATH (installed with Windows SDK)
 ENV PATH="C:\Program Files (x86)\Windows Kits\10\Debuggers\x64;C:\Program Files (x86)\Windows Kits\10\Debuggers\x86;${PATH}"
 
-# Verify working directory
+# Set working directory
 WORKDIR C:/dev
 
-# Default to PowerShell
+# Start PowerShell by default
 CMD ["powershell", "-NoExit", "-Command", "$PSVersionTable"]
