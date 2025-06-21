@@ -30,8 +30,8 @@ FROM africanfuture/windows-devbox-base:latest
 COPY --from=builder ["/Program Files (x86)/Microsoft Visual Studio", "/Program Files (x86)/Microsoft Visual Studio"]
 COPY --from=builder ["/Program Files (x86)/Windows Kits", "/Program Files (x86)/Windows Kits"]
 
-# Set the PATH environment variable to include MSBuild and WinDbg
-ENV PATH="C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\MSBuild\\Current\\Bin;C:\\Program Files (x86)\\Windows Kits\\10\\Debuggers\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\Debuggers\\x86;${env:PATH}"
+# Set the PATH environment variable to include MSBuild and WinDbg (corrected for Windows)
+ENV PATH="C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\MSBuild\\Current\\Bin;C:\\Program Files (x86)\\Windows Kits\\10\\Debuggers\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\Debuggers\\x86;%PATH%"
 
 # Set working directory
 WORKDIR C:/dev
