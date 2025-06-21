@@ -1,19 +1,22 @@
 # Extend the base Windows-native image
 FROM africanfuture/windows-devbox-base:latest
 
+# Set PowerShell as default shell
+SHELL ["powershell", "-Command"]
+
 # Install development tools
 RUN choco install -y --no-progress --timeout 2700 \
     nodejs-lts \
     python \
     dotnet-sdk \
-    openjdk \
     golang \
     rust \
     cmake \
+    make \
     winrar \
-    unzip \
-    vscode; \
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    unzip; \
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; \
+    Remove-Item C:\Temp\choco-cache -Recurse -Force -ErrorAction SilentlyContinue
 
 # Default to PowerShell
 CMD ["powershell", "-NoExit", "-Command", "$PSVersionTable"]
