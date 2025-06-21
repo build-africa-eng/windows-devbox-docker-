@@ -51,6 +51,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 45
     env:
+      BASE_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/windows-devbox-base
       IMAGE_NAME: windows-devbox-dev-tools
     steps:
       - name: Checkout repository
@@ -61,6 +62,9 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Pull base image
+        run: docker pull ${{ env.BASE_IMAGE }}:latest
 
       - name: Build dev-tools image
         run: docker build -f Dockerfile.dev-tools -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
@@ -73,6 +77,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 60
     env:
+      BASE_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/windows-devbox-base
       IMAGE_NAME: windows-devbox-build-tools
     steps:
       - name: Checkout repository
@@ -83,6 +88,9 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Pull base image
+        run: docker pull ${{ env.BASE_IMAGE }}:latest
 
       - name: Build build-tools image
         run: docker build -f Dockerfile.build-tools -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
@@ -95,6 +103,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 45
     env:
+      BASE_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/windows-devbox-base
       IMAGE_NAME: windows-devbox-debug-tools
     steps:
       - name: Checkout repository
@@ -105,6 +114,9 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Pull base image
+        run: docker pull ${{ env.BASE_IMAGE }}:latest
 
       - name: Build debug-tools image
         run: docker build -f Dockerfile.debug-tools -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest .
