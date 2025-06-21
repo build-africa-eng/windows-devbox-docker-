@@ -14,36 +14,14 @@ RUN Write-Host "Checking disk space..."; \
     }
 
 # 2. Download Visual Studio Build Tools with robust error handling
-RUN Write-Host "Downloading Visual Studio Build Tools..."; \
-    $vs_installer_uri = "https://aka.ms/vs/17/release/vs_BuildTools.exe"; \
-    $vs_installer_path = "C:\temp\vs_BuildTools.exe"; \
-    New-Item -ItemType Directory -Path "C:\temp" -Force | Out-Null; \
-    try { \
-        Invoke-WebRequest -Uri $vs_installer_uri -OutFile $vs_installer_path -UseBasicParsing -ErrorAction Stop; \
-        Write-Host "Download completed successfully."; \
-    } catch { \
-        Write-Error "Failed to download Visual Studio Build Tools. Error: $($_.Exception.Message)"; \
-        exit 1; \
-    }
+RUN ["powershell", "-Command", "Write-Host 'Downloading Visual Studio Build Tools...'; $vs_installer_uri = 'https://aka.ms/vs/17/release/vs_BuildTools.exe'; $vs_installer_path = 'C:\\temp\\vs_BuildTools.exe'; New-Item -ItemType Directory -Path 'C:\\temp' -Force | Out-Null; try { Invoke-WebRequest -Uri $vs_installer_uri -OutFile $vs_installer_path -UseBasicParsing -ErrorAction Stop; Write-Host 'Download completed successfully.'; } catch { Write-Error 'Failed to download Visual Studio Build Tools. Error: $($_.Exception.Message)'; exit 1; }"]
 
 # 3. Copy the installer script and execute the VS Build Tools installation
 COPY install-vs.ps1 C:/temp/install-vs.ps1
-RUN Write-Host "Starting Visual Studio Build Tools installation..."; \
-    powershell.exe -ExecutionPolicy Bypass -File C:/temp/install-vs.ps1; \
-    if ($LASTEXITCODE -ne 0) { \
-        Write-Error "Visual Studio Build Tools installation failed."; \
-        exit $LASTEXITCODE; \
-    }
+RUN ["powershell", "-Command", "Write-Host 'Starting Visual Studio Build Tools installation...'; powershell.exe -ExecutionPolicy Bypass -File C:/temp/install-vs.ps1; if ($LASTEXITCODE -ne 0) { Write-Error 'Visual Studio Build Tools installation failed.'; exit $LASTEXITCODE; }"]
 
 # 4. Install Windows SDK 10.1 using Chocolatey with corrected error handling
-RUN Write-Host "Installing Windows SDK 10.1..."; \
-    choco install windows-sdk-10.1 -y --no-progress --timeout=7200; \
-    if ($LASTEXITCODE -ne 0) { \
-        Write-Host "##[error]Windows SDK 10.1 installation failed with exit code $LASTEXITCODE."; \
-        Write-Host "Displaying Chocolatey log:"; \
-        Get-Content C:\ProgramData\chocolatey\logs\chocolatey.log -ErrorAction SilentlyContinue | Write-Host; \
-        exit $LASTEXITCODE; \
-    }
+RUN ["powershell", "-Command", "Write-Host 'Installing Windows SDK 10.1...'; choco install windows-sdk-10.1 -y --no-progress --timeout=7200; if ($LASTEXITCODE -ne 0) { Write-Host '##[error]Windows SDK 10.1 installation failed with exit code $LASTEXITCODE.'; Write-Host 'Displaying Chocolatey log:'; Get-Content C:\\ProgramData\\chocolatey\\logs\\chocolatey.log -ErrorAction SilentlyContinue | Write-Host; exit $LASTEXITCODE; }"]
 
 # Step 2: Create the final, clean image
 FROM africanfuture/windows-devbox-base:latest
