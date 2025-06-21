@@ -17,12 +17,8 @@ RUN Set-ExecutionPolicy Bypass -Scope Process -Force; \
     if (-not (Get-Command choco -ErrorAction SilentlyContinue)) { Write-Error 'Chocolatey not found in PATH'; exit 1 }
 
 # Install core Windows-native tools and OpenJDK 21.0.7
-RUN choco install -y --no-progress --timeout 2700 \
-    git \
-    7zip \
-    curl \
-    wget \
-    microsoft-openjdk --version=21.0.7; \
+RUN choco install -y --no-progress --timeout 2700 git 7zip curl wget; \
+    choco install -y --no-progress --timeout 2700 microsoft-openjdk --version=21.0.7; \
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # Create a working development directory and verify
